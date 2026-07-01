@@ -522,24 +522,52 @@ footer strong{color:var(--accent);}
         <label class="form-label">From Name</label>
         <input class="form-input" id="eFromName" placeholder="Gift N Gallery"/>
       </div>
+      <div class="form-group">
+        <label class="form-label">Send Order Alerts To (your Resend-registered email)</label>
+        <input class="form-input" id="eOwnerEmail" placeholder="you@example.com"/>
+        <div class="link-hint">Using resend.dev sandbox sender — it can only deliver to the email address you signed up to Resend with. Order + customer details will be emailed here instead of to the customer.</div>
+      </div>
       <button class="btn-primary" onclick="saveEmailSettings()">&#128190; Save Email Settings</button>
       <div id="emailSaveMsg" style="font-size:12px;margin-top:8px;display:none;"></div>
 
       <div style="margin-top:24px;padding-top:18px;border-top:1px solid rgba(201,151,58,0.2);">
         <div class="form-label" style="margin-bottom:10px;">&#128640; Supabase Edge Function (deploy once)</div>
         <div style="background:#12121f;border-radius:8px;padding:14px;font-size:11px;color:#a09880;font-family:monospace;line-height:1.8;overflow-x:auto;white-space:pre;">// supabase/functions/send-order-email/index.ts
-import { serve } from "https://deno.land/x/sift/mod.ts";
-serve(async (req) => {
-  const { to, subject, html, resend_api_key, from_email } = await req.json();
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { "Authorization": "Bearer "+resend_api_key, "Content-Type": "application/json" },
-    body: JSON.stringify({ from: from_email, to, subject, html })
-  });
-  const data = await res.json();
-  return new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json" } });
+// IMPORTANT: your site is on a different origin (e.g. GitHub Pages) than
+// *.supabase.co, so the browser needs explicit CORS headers on every
+// response, including the OPTIONS preflight — otherwise fetch() fails
+// silently with no visible error.
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS"
+};
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+  try {
+    const { to, subject, html, resend_api_key, from_email } = await req.json();
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { "Authorization": "Bearer "+resend_api_key, "Content-Type": "application/json" },
+      body: JSON.stringify({ from: from_email, to, subject, html })
+    });
+    const data = await res.json();
+    return new Response(JSON.stringify(data), {
+      status: res.status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" }
+    });
+  } catch (err) {
+    return new Response(JSON.stringify({ error: String(err) }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" }
+    });
+  }
 });</div>
-        <div class="link-hint" style="margin-top:8px;">Deploy: <strong>supabase functions deploy send-order-email</strong></div>
+        <div class="link-hint" style="margin-top:8px;">Deploy: <strong>supabase functions deploy send-order-email --no-verify-jwt</strong></div>
+        <div class="link-hint" style="margin-top:4px;color:var(--danger);">If you already deployed the old version, you must redeploy with this updated code — the CORS headers are what was silently blocking emails.</div>
       </div>
     </div>
 
@@ -681,6 +709,18 @@ var heroBgTimer = null;
 var DEFAULT_BG_IMGS=["data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2MDAgNDAwIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImEiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjEwMCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiMxYTFhMmUiLz48c3RvcCBvZmZzZXQ9IjUwJSIgc3RvcC1jb2xvcj0iIzJhMWE0ZSIvPjxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzFhMmExZSIvPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSJiIiB4MT0iMCUiIHkxPSIwJSIgeDI9IjEwMCUiIHkyPSIxMDAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjQzk5NzNBIi8+PHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjOEI2OTE0Ii8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PHJlY3Qgd2lkdGg9IjYwMCIgaGVpZ2h0PSI0MDAiIGZpbGw9InVybCgjYSkiLz48cmVjdCB4PSIxNzUiIHk9IjE5NSIgd2lkdGg9IjI1MCIgaGVpZ2h0PSIxNjUiIHJ4PSIxMCIgZmlsbD0idXJsKCNiKSIgb3BhY2l0eT0iMC44OCIvPjxyZWN0IHg9IjE2MiIgeT0iMTY4IiB3aWR0aD0iMjc2IiBoZWlnaHQ9IjM4IiByeD0iOCIgZmlsbD0iI2U4Yzk2YSIgb3BhY2l0eT0iMC45MiIvPjxwYXRoIGQ9Ik0zMDAgMTY4IFEyNjggMTM4IDI1NSAxNTMgUTI0MiAxNjggMzAwIDE2OCIgZmlsbD0iI0YwRDA4MCIgb3BhY2l0eT0iMC45Ii8+PHBhdGggZD0iTTMwMCAxNjggUTMzMiAxMzggMzQ1IDE1MyBRMzU4IDE2OCAzMDAgMTY4IiBmaWxsPSIjRjBEMDgwIiBvcGFjaXR5PSIwLjkiLz48Y2lyY2xlIGN4PSIzMDAiIGN5PSIxNjgiIHI9IjEyIiBmaWxsPSIjZmZmIiBvcGFjaXR5PSIwLjg1Ii8+PC9zdmc+","data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2MDAgNDAwIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImEiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjEwMCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiMwZjBmMjMiLz48c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiMxZTE0NDAiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz48cmVjdCB3aWR0aD0iNjAwIiBoZWlnaHQ9IjQwMCIgZmlsbD0idXJsKCNhKSIvPjxyZWN0IHg9IjE5NSIgeT0iMTc4IiB3aWR0aD0iMTk1IiBoZWlnaHQ9IjE3MiIgcng9IjEwIiBmaWxsPSIjOEIyMjUyIiBvcGFjaXR5PSIwLjgyIi8+PHJlY3QgeD0iMTgzIiB5PSIxNTAiIHdpZHRoPSIyMTkiIGhlaWdodD0iMzgiIHJ4PSI4IiBmaWxsPSIjQzAzOTZFIiBvcGFjaXR5PSIwLjkiLz48cGF0aCBkPSJNMjkzIDE1MCBRMjYyIDEyMiAyNTAgMTM3IFEyMzggMTUyIDI5MyAxNTAiIGZpbGw9IiNGRkI2QzEiIG9wYWNpdHk9IjAuODUiLz48cGF0aCBkPSJNMjkzIDE1MCBRMzI0IDEyMiAzMzYgMTM3IFEzNDggMTUyIDI5MyAxNTAiIGZpbGw9IiNGRkI2QzEiIG9wYWNpdHk9IjAuODUiLz48Y2lyY2xlIGN4PSIyOTMiIGN5PSIxNTAiIHI9IjExIiBmaWxsPSIjZmZmIiBvcGFjaXR5PSIwLjgiLz48cmVjdCB4PSIxMDUiIHk9IjI1MiIgd2lkdGg9IjEwMiIgaGVpZ2h0PSI5OCIgcng9IjciIGZpbGw9IiMyODc0QTYiIG9wYWNpdHk9IjAuNzgiLz48cmVjdCB4PSI0MDAiIHk9IjI0MiIgd2lkdGg9Ijk4IiBoZWlnaHQ9IjEwOCIgcng9IjciIGZpbGw9IiMxRTg0NDkiIG9wYWNpdHk9IjAuNzgiLz48L3N2Zz4=","data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2MDAgNDAwIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImEiIHgxPSIwJSIgeTE9IjEwMCUiIHgyPSIxMDAlIiB5Mj0iMCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiMxMjEyMWYiLz48c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiMyYTFhNGUiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz48cmVjdCB3aWR0aD0iNjAwIiBoZWlnaHQ9IjQwMCIgZmlsbD0idXJsKCNhKSIvPjxlbGxpcHNlIGN4PSIxNjUiIGN5PSIxNzUiIHJ4PSI0NiIgcnk9IjU4IiBmaWxsPSIjRTc0QzNDIiBvcGFjaXR5PSIwLjY1Ii8+PGxpbmUgeDE9IjE2NSIgeTE9IjIzMyIgeDI9IjE2MCIgeTI9IjMxNSIgc3Ryb2tlPSIjRTc0QzNDIiBzdHJva2Utd2lkdGg9IjIiLz48ZWxsaXBzZSBjeD0iMjU1IiBjeT0iMTQ1IiByeD0iNDIiIHJ5PSI1MiIgZmlsbD0iI0YzOUMxMiIgb3BhY2l0eT0iMC42NSIvPjxlbGxpcHNlIGN4PSIzNDUiIGN5PSIxNTgiIHJ4PSI0NCIgcnk9IjU0IiBmaWxsPSIjOUI1OUI2IiBvcGFjaXR5PSIwLjY1Ii8+PHJlY3QgeD0iMjE4IiB5PSIyNzIiIHdpZHRoPSIxNjgiIGhlaWdodD0iMTA4IiByeD0iMTAiIGZpbGw9IiNDOTk3M0EiIG9wYWNpdHk9IjAuODUiLz48cmVjdCB4PSIyMDYiIHk9IjI0OCIgd2lkdGg9IjE5MiIgaGVpZ2h0PSIzNCIgcng9IjgiIGZpbGw9IiNlOGM5NmEiIG9wYWNpdHk9IjAuOSIvPjxwYXRoIGQ9Ik0zMDMgMjQ4IFEyNzIgMjIwIDI2MCAyMzUgUTI0OCAyNTAgMzAzIDI0OCIgZmlsbD0iI2ZmZiIgb3BhY2l0eT0iMC42Ii8+PGNpcmNsZSBjeD0iMzAzIiBjeT0iMjQ4IiByPSIxMCIgZmlsbD0iI2ZmZiIgb3BhY2l0eT0iMC44Ii8+PC9zdmc+","data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2MDAgNDAwIj48ZGVmcz48cmFkaWFsR3JhZGllbnQgaWQ9ImEiIGN4PSI1MCUiIGN5PSI1MCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiMxZTE0NDAiLz48c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiMwZjBmMjMiLz48L3JhZGlhbEdyYWRpZW50PjwvZGVmcz48cmVjdCB3aWR0aD0iNjAwIiBoZWlnaHQ9IjQwMCIgZmlsbD0idXJsKCNhKSIvPjxjaXJjbGUgY3g9IjE3NSIgY3k9IjEzOCIgcj0iMzIiIGZpbGw9IiM4QjIyNTIiIG9wYWNpdHk9IjAuNDUiLz48Y2lyY2xlIGN4PSIxNDgiIGN5PSIxMzgiIHI9IjIwIiBmaWxsPSIjQzAzOTZFIiBvcGFjaXR5PSIwLjM4Ii8+PGNpcmNsZSBjeD0iMjAyIiBjeT0iMTM4IiByPSIyMCIgZmlsbD0iI0MwMzk2RSIgb3BhY2l0eT0iMC4zOCIvPjxjaXJjbGUgY3g9IjE3NSIgY3k9IjExMCIgcj0iMjAiIGZpbGw9IiNDMDM5NkUiIG9wYWNpdHk9IjAuMzgiLz48Y2lyY2xlIGN4PSIxNzUiIGN5PSIxNjYiIHI9IjIwIiBmaWxsPSIjQzAzOTZFIiBvcGFjaXR5PSIwLjM4Ii8+PGNpcmNsZSBjeD0iMTc1IiBjeT0iMTM4IiByPSIxMyIgZmlsbD0iI0ZGQjZDMSIgb3BhY2l0eT0iMC44Ii8+PHJlY3QgeD0iMjA1IiB5PSIxOTUiIHdpZHRoPSIxOTAiIGhlaWdodD0iMTQ4IiByeD0iMTIiIGZpbGw9IiNDOTk3M0EiIG9wYWNpdHk9IjAuOCIvPjxyZWN0IHg9IjE5MiIgeT0iMTY4IiB3aWR0aD0iMjE2IiBoZWlnaHQ9IjM2IiByeD0iOSIgZmlsbD0iI2U4Yzk2YSIgb3BhY2l0eT0iMC45Ii8+PHBhdGggZD0iTTMwMiAxNjggUTI3MCAxNDAgMjU4IDE1NSBRMjQ2IDE3MCAzMDIgMTY4IiBmaWxsPSIjRjBEMDgwIiBvcGFjaXR5PSIwLjg4Ii8+PGNpcmNsZSBjeD0iMzAyIiBjeT0iMTY4IiByPSIxMSIgZmlsbD0iI2ZmZiIgb3BhY2l0eT0iMC44MiIvPjwvc3ZnPg==","data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2MDAgNDAwIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImEiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjEwMCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiMxYTEyMDgiLz48c3RvcCBvZmZzZXQ9IjUwJSIgc3RvcC1jb2xvcj0iIzFhMWEyZSIvPjxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzBmMWEwZiIvPjwvbGluZWFyR3JhZGllbnQ+PGxpbmVhckdyYWRpZW50IGlkPSJiIiB4MT0iMCUiIHkxPSIwJSIgeDI9IjEwMCUiIHkyPSIxMDAlIj48c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjRjBEMDgwIi8+PHN0b3Agb2Zmc2V0PSI1MCUiIHN0b3AtY29sb3I9IiNDOTk3M0EiLz48c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiM4QjY5MTQiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz48cmVjdCB3aWR0aD0iNjAwIiBoZWlnaHQ9IjQwMCIgZmlsbD0idXJsKCNhKSIvPjxwb2x5Z29uIHBvaW50cz0iMzAwLDc4IDMyMiwxMTIgMzU2LDEwMCAzMzgsMTM0IDI2MiwxMzQgMjQ0LDEwMCAyNzgsMTEyIiBmaWxsPSJ1cmwoI2IpIiBvcGFjaXR5PSIwLjcyIi8+PHJlY3QgeD0iMTgyIiB5PSIxOTQiIHdpZHRoPSIyMzYiIGhlaWdodD0iMTY0IiByeD0iMTMiIGZpbGw9InVybCgjYikiIG9wYWNpdHk9IjAuNzIiLz48cmVjdCB4PSIxNjgiIHk9IjE2NiIgd2lkdGg9IjI2NCIgaGVpZ2h0PSIzOCIgcng9IjEwIiBmaWxsPSIjRjBEMDgwIiBvcGFjaXR5PSIwLjg1Ii8+PHBhdGggZD0iTTMwMCAxNjYgUTI2NCAxMzYgMjUwIDE1MiBRMjM2IDE2OCAzMDAgMTY2IiBmaWxsPSIjRjBEMDgwIiBvcGFjaXR5PSIwLjkiLz48Y2lyY2xlIGN4PSIzMDAiIGN5PSIxNjYiIHI9IjEyIiBmaWxsPSIjZmZmIiBvcGFjaXR5PSIwLjgyIi8+PC9zdmc+"];
 
 // ---- SUPABASE API ----
+// Safely reads an order's items regardless of how they were stored.
+// Handles: a proper array (new/clean rows), a JSON string (old
+// double-encoded rows from before this fix), or a missing value.
+function getOrderItems(o){
+  var v = o && o.items;
+  if (Array.isArray(v)) return v;
+  if (typeof v === 'string' && v.trim()) {
+    try { var parsed = JSON.parse(v); return Array.isArray(parsed) ? parsed : []; }
+    catch(e) { return []; }
+  }
+  return [];
+}
 async function sbFetch(path, method, body) {
   if(!SUPA_KEY || !SUPA_KEY.startsWith('eyJ')) {
     throw new Error('Supabase anon key not set. Go to Admin › Database to configure.');
@@ -1298,7 +1338,7 @@ async function confirmOrder(){
     state:document.getElementById('cState').value.trim(),
     pincode:document.getElementById('cPin').value.trim(),
     notes:document.getElementById('cNotes').value.trim(),
-    items:JSON.stringify(cart.map(function(i){return {name:i.name,price:i.price,qty:i.qty};})),
+    items:cart.map(function(i){return {name:i.name,price:i.price,qty:i.qty};}),
     subtotal:subtotal, delivery:delivery, total:total, payment:selectedPayment
   };
   try {
@@ -1315,7 +1355,7 @@ async function confirmOrder(){
   }
 }
 async function sendOrderNotification(o){
-  var items=JSON.parse(o.items||'[]');
+  var items=getOrderItems(o);
   var itemsText=items.map(function(i){return i.qty+'x '+i.name+' @ \u20b9'+i.price;}).join('\n');
   var itemsTextShort=items.map(function(i){return i.qty+'x '+i.name;}).join(', ');
   var addr=[o.addr1,o.addr2,o.landmark,o.city,o.state,o.pincode].filter(Boolean).join(', ');
@@ -1352,38 +1392,38 @@ async function sendOrderNotification(o){
     if(notifEl) notifEl.innerHTML=notifHtml+(notifEl.innerHTML||'');
   }, 800);
 
-  // --- 3. CUSTOMER Email via Resend (uses Supabase Edge Function) ---
-  if(o.customer_email){
-    try{
-      var emailSettings=await getEmailSettings();
-      if(emailSettings && emailSettings.resend_api_key && emailSettings.from_email){
-        var htmlBody=buildOrderEmailHTML(o,items,addr);
-        var res=await fetch(SUPA_URL+'/functions/v1/send-order-email',{
-          method:'POST',
-          headers:{
-            'Authorization':'Bearer '+SUPA_KEY,
-            'Content-Type':'application/json'
-          },
-          body:JSON.stringify({
-            to: o.customer_email,
-            subject: '🎁 Order Confirmed! '+o.id+' — Gift N Gallery',
-            html: htmlBody,
-            resend_api_key: emailSettings.resend_api_key,
-            from_email: emailSettings.from_email
-          })
-        });
-        if(res.ok){
-          notifHtml='<div style="background:rgba(66,133,244,0.12);border:1px solid rgba(66,133,244,0.35);border-radius:8px;padding:10px 14px;margin-bottom:8px;font-size:13px;">📧 <strong>Email</strong> confirmation sent to '+o.customer_email+'</div>';
-        } else {
-          notifHtml='<div style="background:rgba(231,76,60,0.1);border:1px solid rgba(231,76,60,0.3);border-radius:8px;padding:10px 14px;margin-bottom:8px;font-size:13px;">📧 Email not sent — configure Resend in Admin › Email</div>';
-        }
+  // --- 3. Order alert Email via Resend (uses Supabase Edge Function) ---
+  // Sent to YOUR registered email, not the customer's — resend.dev's
+  // sandbox sender can only deliver to the address you signed up with.
+  try{
+    var emailSettings=await getEmailSettings();
+    if(emailSettings && emailSettings.resend_api_key && emailSettings.from_email && emailSettings.owner_email){
+      var htmlBody=buildOrderAlertEmailHTML(o,items,addr);
+      var res=await fetch(SUPA_URL+'/functions/v1/send-order-email',{
+        method:'POST',
+        headers:{
+          'Authorization':'Bearer '+SUPA_KEY,
+          'Content-Type':'application/json'
+        },
+        body:JSON.stringify({
+          to: emailSettings.owner_email,
+          subject: '🛍️ New Order '+o.id+' — Gift N Gallery',
+          html: htmlBody,
+          resend_api_key: emailSettings.resend_api_key,
+          from_email: emailSettings.from_email
+        })
+      });
+      if(res.ok){
+        notifHtml='<div style="background:rgba(66,133,244,0.12);border:1px solid rgba(66,133,244,0.35);border-radius:8px;padding:10px 14px;margin-bottom:8px;font-size:13px;">📧 Order alert emailed to '+emailSettings.owner_email+'</div>';
       } else {
-        notifHtml='<div style="background:rgba(243,156,18,0.1);border:1px solid rgba(243,156,18,0.3);border-radius:8px;padding:10px 14px;margin-bottom:8px;font-size:13px;">📧 Email not configured yet — set up Resend in Admin › Email settings</div>';
+        notifHtml='<div style="background:rgba(231,76,60,0.1);border:1px solid rgba(231,76,60,0.3);border-radius:8px;padding:10px 14px;margin-bottom:8px;font-size:13px;">📧 Email not sent — check Resend setup in Admin › Email</div>';
       }
-      if(notifEl) notifEl.innerHTML=(notifEl.innerHTML||'')+notifHtml;
-    }catch(err){
-      console.warn('Email send error:',err);
+    } else {
+      notifHtml='<div style="background:rgba(243,156,18,0.1);border:1px solid rgba(243,156,18,0.3);border-radius:8px;padding:10px 14px;margin-bottom:8px;font-size:13px;">📧 Email not configured yet — set up Resend in Admin › Email settings</div>';
     }
+    if(notifEl) notifEl.innerHTML=(notifEl.innerHTML||'')+notifHtml;
+  }catch(err){
+    console.warn('Email send error:',err);
   }
 }
 
@@ -1439,6 +1479,52 @@ function buildOrderEmailHTML(o,items,addr){
     +'</div></div></div></body></html>';
 }
 
+function buildOrderAlertEmailHTML(o,items,addr){
+  var rows=items.map(function(i){
+    return '<tr><td style="padding:8px 12px;border-bottom:1px solid #2a2a45;color:#f0ece0;">'+i.name+'</td>'
+      +'<td style="padding:8px 12px;border-bottom:1px solid #2a2a45;color:#a09880;text-align:center;">'+i.qty+'</td>'
+      +'<td style="padding:8px 12px;border-bottom:1px solid #2a2a45;color:#e8c96a;text-align:right;">\u20b9'+i.price.toLocaleString('en-IN')+'</td>'
+      +'<td style="padding:8px 12px;border-bottom:1px solid #2a2a45;color:#e8c96a;text-align:right;">\u20b9'+(i.price*i.qty).toLocaleString('en-IN')+'</td></tr>';
+  }).join('');
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"/></head><body style="margin:0;padding:0;background:#0f0f1e;font-family:Inter,sans-serif;">'
+    +'<div style="max-width:560px;margin:0 auto;padding:24px;">'
+    +'<div style="background:linear-gradient(135deg,#1a1a2e,#2a1a4e);border:1px solid #C9973A;border-radius:16px;overflow:hidden;">'
+    +'<div style="background:linear-gradient(135deg,#C9973A,#e8c96a);padding:24px 28px;text-align:center;">'
+    +'<div style="font-size:36px;margin-bottom:8px;">🛍️</div>'
+    +'<div style="font-size:22px;font-weight:700;color:#12121f;">New Order Received!</div>'
+    +'<div style="font-size:13px;color:#3a2e0a;margin-top:4px;">Gift N Gallery</div></div>'
+    +'<div style="padding:24px 28px;">'
+    +'<div style="background:rgba(46,204,113,0.1);border:1px solid rgba(46,204,113,0.3);border-radius:8px;padding:12px 16px;margin-bottom:20px;text-align:center;">'
+    +'<div style="color:#2ecc71;font-size:13px;font-weight:600;">Order ID: <strong style="color:#e8c96a;">'+o.id+'</strong></div></div>'
+    +'<div style="font-size:13px;color:#a09880;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">Customer Details</div>'
+    +'<div style="background:#22223a;border-radius:8px;padding:14px 16px;margin-bottom:20px;font-size:13px;color:#f0ece0;line-height:1.9;">'
+    +'<div><strong style="color:#a09880;">Name:</strong> '+o.customer_name+'</div>'
+    +'<div><strong style="color:#a09880;">Phone:</strong> '+o.customer_phone+'</div>'
+    +(o.customer_email?'<div><strong style="color:#a09880;">Email:</strong> '+o.customer_email+'</div>':'')
+    +'</div>'
+    +'<div style="font-size:13px;color:#a09880;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">Order Summary</div>'
+    +'<table style="width:100%;border-collapse:collapse;margin-bottom:20px;">'
+    +'<thead><tr style="background:#22223a;">'
+    +'<th style="padding:8px 12px;text-align:left;font-size:11px;color:#a09880;font-weight:600;">ITEM</th>'
+    +'<th style="padding:8px 12px;text-align:center;font-size:11px;color:#a09880;font-weight:600;">QTY</th>'
+    +'<th style="padding:8px 12px;text-align:right;font-size:11px;color:#a09880;font-weight:600;">PRICE</th>'
+    +'<th style="padding:8px 12px;text-align:right;font-size:11px;color:#a09880;font-weight:600;">TOTAL</th></tr></thead>'
+    +'<tbody>'+rows+'</tbody>'
+    +'<tfoot><tr><td colspan="3" style="padding:10px 12px;text-align:right;color:#f0ece0;font-weight:700;">Total</td>'
+    +'<td style="padding:10px 12px;text-align:right;color:#e8c96a;font-size:16px;font-weight:700;">\u20b9'+o.total.toLocaleString('en-IN')+'</td></tr></tfoot></table>'
+    +'<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px;">'
+    +'<div style="flex:1;min-width:180px;background:#22223a;border-radius:8px;padding:12px 14px;">'
+    +'<div style="font-size:11px;color:#a09880;margin-bottom:4px;text-transform:uppercase;letter-spacing:1px;">Payment</div>'
+    +'<div style="font-size:13px;color:#f0ece0;font-weight:600;">'+o.payment.toUpperCase()+'</div></div>'
+    +'<div style="flex:2;min-width:200px;background:#22223a;border-radius:8px;padding:12px 14px;">'
+    +'<div style="font-size:11px;color:#a09880;margin-bottom:4px;text-transform:uppercase;letter-spacing:1px;">Deliver To</div>'
+    +'<div style="font-size:13px;color:#f0ece0;line-height:1.5;">'+addr+'</div></div></div>'
+    +(o.notes?'<div style="background:#22223a;border-radius:8px;padding:12px 14px;margin-bottom:20px;"><div style="font-size:11px;color:#a09880;margin-bottom:4px;">NOTES</div><div style="font-size:13px;color:#f0ece0;">'+o.notes+'</div></div>':'')
+    +'<div style="text-align:center;padding:16px 0;border-top:1px solid rgba(201,151,58,0.2);">'
+    +'<div style="font-size:11px;color:rgba(160,152,128,0.5);">— Gift N Gallery Order System</div></div>'
+    +'</div></div></div></body></html>';
+}
+
 // ---- ORDERS MANAGEMENT ----
 function renderOrders(){
   var list=document.getElementById('ordersList');
@@ -1446,7 +1532,7 @@ function renderOrders(){
   if(!filtered.length){list.innerHTML='<div style="text-align:center;color:var(--muted);padding:30px;">No orders found.</div>';return;}
   list.innerHTML='';
   filtered.forEach(function(o){
-    var items=JSON.parse(o.items||'[]');
+    var items=getOrderItems(o);
     var addr=[o.addr1,o.addr2,o.landmark,o.city,o.state+' '+o.pincode].filter(Boolean).join(', ');
     var statusClass={'new':'status-new','processing':'status-processing','done':'status-done'}[o.status]||'status-new';
     var statusLabel={'new':'&#128994; New','processing':'&#128992; Processing','done':'&#9989; Done'}[o.status]||'New';
@@ -1493,7 +1579,7 @@ async function deleteOrder(id){
 }
 function resendWA(id){
   var o=orders.find(function(o){return o.id===id;});if(!o||!contact.whatsapp)return;
-  var items=JSON.parse(o.items||'[]');
+  var items=getOrderItems(o);
   var addr=[o.addr1,o.addr2,o.landmark,o.city,o.state,o.pincode].filter(Boolean).join(', ');
   var msg='Order '+o.id+'\nCustomer: '+o.customer_name+'\nPhone: '+o.customer_phone+'\nItems: '+items.map(function(i){return i.qty+'x '+i.name;}).join(', ')+'\nTotal: Rs.'+o.total+'\nPayment: '+o.payment.toUpperCase()+'\nAddress: '+addr;
   window.open('https://wa.me/'+contact.whatsapp+'?text='+encodeURIComponent(msg),'_blank');
@@ -1548,11 +1634,15 @@ async function saveEmailSettings(){
   var key=document.getElementById('eResendKey').value.trim();
   var from=document.getElementById('eFromEmail').value.trim();
   var name=document.getElementById('eFromName').value.trim();
+  var ownerEmail=document.getElementById('eOwnerEmail').value.trim();
   var msg=document.getElementById('emailSaveMsg');
   if(!key||!from){
     msg.style.display='block';msg.style.color='var(--danger)';msg.textContent='API Key and From Email are required.';return;
   }
-  var settings={resend_api_key:key, from_email: name?name+' <'+from+'>':from, from_name:name};
+  if(from.trim().toLowerCase()==='onboarding@resend.dev' && !ownerEmail){
+    msg.style.display='block';msg.style.color='var(--danger)';msg.textContent='You are using the resend.dev sandbox sender — it can only deliver to your own Resend-registered email. Please fill in "Send Order Alerts To" above.';return;
+  }
+  var settings={resend_api_key:key, from_email: name?name+' <'+from+'>':from, from_name:name, owner_email:ownerEmail};
   await saveSetting('emailSettings',settings);
   msg.style.display='block';msg.style.color='var(--success)';msg.textContent='✅ Email settings saved!';
   setTimeout(function(){msg.style.display='none';},3000);
@@ -1566,6 +1656,7 @@ async function loadEmailForm(){
   if(emailMatch) document.getElementById('eFromEmail').value=emailMatch[1];
   else if(fromRaw) document.getElementById('eFromEmail').value=fromRaw;
   if(s.from_name) document.getElementById('eFromName').value=s.from_name;
+  if(s.owner_email) document.getElementById('eOwnerEmail').value=s.owner_email;
 }
 
 // ---- PAYMENT SETTINGS ----
